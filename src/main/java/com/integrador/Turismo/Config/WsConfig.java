@@ -50,6 +50,21 @@ public class WsConfig {
         return wsdl11Definition;
     }
 
+    @Bean(name = "reportes")
+    public DefaultWsdl11Definition reportesWsdl11Definition(XsdSchema reportesSchema) {
+        DefaultWsdl11Definition wsdl11Definition = new DefaultWsdl11Definition();
+        wsdl11Definition.setPortTypeName("ReportesPort");
+        wsdl11Definition.setLocationUri("/ws");
+        wsdl11Definition.setTargetNamespace("http://aqpgo.com/reportes");
+        wsdl11Definition.setSchema(reportesSchema);
+        return wsdl11Definition;
+    }
+
+    @Bean
+    public XsdSchema reportesSchema() {
+        return new SimpleXsdSchema(new ClassPathResource("reporte.xsd"));
+    }
+
     @Bean
     public XsdSchema reservasSchema() {
         return new SimpleXsdSchema(new ClassPathResource("reserva.xsd"));
