@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://aqpgo.com/reportes" targetNamespace="http://aqpgo.com/reportes" elementFormDefault="qualified">
+
+    <xs:element name="resumenReportesRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="token" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="resumenReportesResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="ingresosEsteMes" type="xs:string"/>
+                <xs:element name="totalReservas" type="xs:int"/>
+                <xs:element name="confirmadas" type="xs:int"/>
+                <xs:element name="crecimientoIngresos" type="xs:double"/>
+                <xs:element name="nuevosClientesMes" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
