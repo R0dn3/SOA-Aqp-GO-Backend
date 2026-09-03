@@ -1,0 +1,70 @@
+# ==========================================
+# ARCHIVOS GENERADOS Y CONFIGURACIÓN BASE
+# ==========================================
+HELP.md
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ==========================================
+# CONFIGURACIÓN DE ENTORNOS DE DESARROLLO (IDE)
+# ==========================================
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+# ==========================================
+# CONTROL DE COMPILADOS Y BINARIOS (JAVA)
+# ==========================================
+# Forzar el bloqueo total de carpetas de salida de Gradle/Eclipse/VSCode
+bin/
+**/bin/
+**/build/
+**/out/
+
+# ==========================================
+# FRONTEND (NEXT.JS & NODE.JS)
+# ==========================================
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# REGLAS DE SEGURIDAD (CREDENTIALS & SECRETS)
+# ==========================================
+# Bloqueo estricto del archivo de claves de Google/Firebase
+serviceAccountKey.json
+**/serviceAccountKey.json
+**/src/main/resources/serviceAccountKey.json
+
+# Archivos de logs de errores de Java/Gradle (Basura del sistema)
+hs_err_pid*.log
+replay_pid*.log

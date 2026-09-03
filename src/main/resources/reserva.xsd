@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://aqpgo.com/reservas" targetNamespace="http://aqpgo.com/reservas" elementFormDefault="qualified">
+
+    <xs:element name="consultarReservaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="consultarReservaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:string"/>
+                <xs:element name="paqueteNombre" type="xs:string"/>
+                <xs:element name="fechaSalida" type="xs:string"/>
+                <xs:element name="numPersonas" type="xs:int"/>
+                <xs:element name="precioTotal" type="xs:string"/>
+                <xs:element name="estado" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="crearReservaRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="usuarioId" type="xs:string"/>
+                <xs:element name="paqueteId" type="xs:string"/>
+                <xs:element name="fechaSalida" type="xs:string"/>
+                <xs:element name="numPersonas" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="crearReservaResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:string"/>
+                <xs:element name="paqueteNombre" type="xs:string"/>
+                <xs:element name="fechaSalida" type="xs:string"/>
+                <xs:element name="numPersonas" type="xs:int"/>
+                <xs:element name="precioTotal" type="xs:string"/>
+                <xs:element name="estado" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="listarReservasPorUsuarioRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="usuarioId" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="listarReservasPorUsuarioResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="reserva" type="tns:reservaItem" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="reservaItem">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="paqueteId" type="xs:string"/>
+            <xs:element name="paqueteNombre" type="xs:string"/>
+            <xs:element name="fotoPrincipal" type="xs:string" minOccurs="0"/>
+            <xs:element name="fechaSalida" type="xs:string"/>
+            <xs:element name="numPersonas" type="xs:int"/>
+            <xs:element name="precioTotal" type="xs:string"/>
+            <xs:element name="estado" type="xs:string"/>
+            <xs:element name="createdAt" type="xs:string"/>
+            <xs:element name="acompanante" type="tns:acompananteItem" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="acompananteItem">
+        <xs:sequence>
+            <xs:element name="nombreCompleto" type="xs:string"/>
+            <xs:element name="dniPasaporte" type="xs:string"/>
+            <xs:element name="pais" type="xs:string" minOccurs="0"/>
+            <xs:element name="fechaNacimiento" type="xs:string" minOccurs="0"/>
+            <xs:element name="genero" type="xs:string" minOccurs="0"/>
+            <xs:element name="datosAdicionales" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
