@@ -36,7 +36,9 @@ public class WsConfig {
                 com.integrador.Turismo.Soap.ListarReservasPorUsuarioRequest.class,
                 com.integrador.Turismo.Soap.ListarReservasPorUsuarioResponse.class,
                 com.integrador.Turismo.Soap.ReservaItem.class,
-                com.integrador.Turismo.Soap.AcompananteItem.class);
+                com.integrador.Turismo.Soap.AcompananteItem.class,
+                com.integrador.Turismo.Soap.ResumenReportesRequest.class,
+                com.integrador.Turismo.Soap.ResumenReportesResponse.class);
         return marshaller;
     }
 
