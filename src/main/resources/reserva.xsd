@@ -14,11 +14,15 @@
         <xs:complexType>
             <xs:sequence>
                 <xs:element name="id" type="xs:string"/>
+                <xs:element name="paqueteId" type="xs:string"/>
                 <xs:element name="paqueteNombre" type="xs:string"/>
+                <xs:element name="fotoPrincipal" type="xs:string" minOccurs="0"/>
                 <xs:element name="fechaSalida" type="xs:string"/>
                 <xs:element name="numPersonas" type="xs:int"/>
                 <xs:element name="precioTotal" type="xs:string"/>
                 <xs:element name="estado" type="xs:string"/>
+                <xs:element name="createdAt" type="xs:string"/>
+                <xs:element name="acompanante" type="tns:acompananteItem" minOccurs="0" maxOccurs="unbounded"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
