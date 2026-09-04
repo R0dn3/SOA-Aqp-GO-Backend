@@ -27,11 +27,27 @@ public class ReservaEndpoint {
 
         ConsultarReservaResponse response = new ConsultarReservaResponse();
         response.setId(reserva.id());
+        response.setPaqueteId(reserva.paqueteId());
         response.setPaqueteNombre(reserva.paqueteNombre());
+        response.setFotoPrincipal(reserva.fotoPrincipal());
         response.setFechaSalida(reserva.fechaSalida().toString());
         response.setNumPersonas(reserva.numPersonas());
         response.setPrecioTotal(reserva.precioTotal().toString());
         response.setEstado(reserva.estado());
+        response.setCreatedAt(reserva.createdAt().toString());
+
+        List<AcompananteItem> acompanantes = new ArrayList<>();
+        for (var a : reserva.acompanantes()) {
+            AcompananteItem ai = new AcompananteItem();
+            ai.setNombreCompleto(a.nombreCompleto());
+            ai.setDniPasaporte(a.dniPasaporte());
+            ai.setPais(a.pais());
+            ai.setFechaNacimiento(a.fechaNacimiento() != null ? a.fechaNacimiento().toString() : null);
+            ai.setGenero(a.genero());
+            ai.setDatosAdicionales(a.datosAdicionales());
+            acompanantes.add(ai);
+        }
+        response.setAcompanante(acompanantes);
 
         return response;
     }
@@ -57,9 +73,10 @@ public class ReservaEndpoint {
         return response;
     }
 
-        @PayloadRoot(namespace = NAMESPACE_URI, localPart = "listarReservasPorUsuarioRequest")
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "listarReservasPorUsuarioRequest")
     @ResponsePayload
-    public ListarReservasPorUsuarioResponse listarReservasPorUsuario(@RequestPayload ListarReservasPorUsuarioRequest request) {
+    public ListarReservasPorUsuarioResponse listarReservasPorUsuario(
+            @RequestPayload ListarReservasPorUsuarioRequest request) {
         List<ReservaResponse> reservas = reservaService.misReservas(request.getUsuarioId());
 
         List<ReservaItem> items = new ArrayList<>();
