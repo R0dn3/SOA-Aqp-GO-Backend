@@ -34,6 +34,7 @@
                 <xs:element name="paqueteId" type="xs:string"/>
                 <xs:element name="fechaSalida" type="xs:string"/>
                 <xs:element name="numPersonas" type="xs:int"/>
+                <xs:element name="acompanante" type="tns:acompananteItem" minOccurs="0" maxOccurs="unbounded"/>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
