@@ -1,5 +1,6 @@
 package com.integrador.Turismo.Soap;
 
+import com.integrador.Turismo.DTO.AcompananteDto;
 import com.integrador.Turismo.DTO.ReservaResponse;
 import com.integrador.Turismo.Service.ReservaService;
 import lombok.RequiredArgsConstructor;
@@ -55,11 +56,24 @@ public class ReservaEndpoint {
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "crearReservaRequest")
     @ResponsePayload
     public CrearReservaResponse crearReserva(@RequestPayload CrearReservaRequest request) {
+        List<AcompananteDto> acompanantes = new ArrayList<>();
+        for (AcompananteItem ai : request.getAcompanante()) {
+            acompanantes.add(new AcompananteDto(
+                    ai.getNombreCompleto(),
+                    ai.getDniPasaporte(),
+                    ai.getPais(),
+                    ai.getFechaNacimiento() != null && !ai.getFechaNacimiento().isBlank()
+                            ? LocalDate.parse(ai.getFechaNacimiento())
+                            : null,
+                    ai.getGenero(),
+                    ai.getDatosAdicionales()));
+        }
+
         ReservaRequest req = new ReservaRequest(
                 request.getPaqueteId(),
                 LocalDate.parse(request.getFechaSalida()),
                 request.getNumPersonas(),
-                java.util.Collections.emptyList());
+                acompanantes);
 
         ReservaResponse reserva = reservaService.crear(req, request.getUsuarioId());
 
