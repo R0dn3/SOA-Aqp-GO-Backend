@@ -5,6 +5,9 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @XmlRootElement(name = "crearReservaRequest", namespace = "http://aqpgo.com/reservas")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class CrearReservaRequest {
@@ -20,6 +23,9 @@ public class CrearReservaRequest {
 
     @XmlElement(name = "numPersonas", namespace = "http://aqpgo.com/reservas")
     private int numPersonas;
+
+    @XmlElement(name = "acompanante", namespace = "http://aqpgo.com/reservas")
+    private List<AcompananteItem> acompanante = new ArrayList<>();
 
     public String getUsuarioId() {
         return usuarioId;
@@ -51,5 +57,13 @@ public class CrearReservaRequest {
 
     public void setNumPersonas(int numPersonas) {
         this.numPersonas = numPersonas;
+    }
+
+    public List<AcompananteItem> getAcompanante() {
+        return acompanante;
+    }
+
+    public void setAcompanante(List<AcompananteItem> acompanante) {
+        this.acompanante = acompanante;
     }
 }
