@@ -1,8 +1,5 @@
 package com.integrador.Turismo.Soap;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
@@ -24,9 +21,6 @@ public class ReservarYPagarRequest {
     @XmlElement(name = "numPersonas", namespace = "http://aqpgo.com/orquestador")
     private int numPersonas;
 
-    @XmlElement(name = "acompanante", namespace = "http://aqpgo.com/orquestador")
-    private List<AcompananteItem> acompanante = new ArrayList<>();
-
     @XmlElement(name = "monto", namespace = "http://aqpgo.com/orquestador")
     private String monto;
 
@@ -36,7 +30,6 @@ public class ReservarYPagarRequest {
     @XmlElement(name = "referencia", namespace = "http://aqpgo.com/orquestador")
     private String referencia;
 
-    // Getters y setters
     public String getUsuarioId() {
         return usuarioId;
     }
@@ -67,14 +60,6 @@ public class ReservarYPagarRequest {
 
     public void setNumPersonas(int numPersonas) {
         this.numPersonas = numPersonas;
-    }
-
-    public List<AcompananteItem> getAcompanante() {
-        return acompanante;
-    }
-
-    public void setAcompanante(List<AcompananteItem> acompanante) {
-        this.acompanante = acompanante;
     }
 
     public String getMonto() {

@@ -38,7 +38,9 @@ public class WsConfig {
                 com.integrador.Turismo.Soap.ReservaItem.class,
                 com.integrador.Turismo.Soap.AcompananteItem.class,
                 com.integrador.Turismo.Soap.ResumenReportesRequest.class,
-                com.integrador.Turismo.Soap.ResumenReportesResponse.class);
+                com.integrador.Turismo.Soap.ResumenReportesResponse.class,
+                com.integrador.Turismo.Soap.ReservarYPagarRequest.class, // nuevo
+                com.integrador.Turismo.Soap.ReservarYPagarResponse.class); // nuevo
         return marshaller;
     }
 
@@ -60,6 +62,21 @@ public class WsConfig {
         wsdl11Definition.setTargetNamespace("http://aqpgo.com/reportes");
         wsdl11Definition.setSchema(reportesSchema);
         return wsdl11Definition;
+    }
+
+    @Bean(name = "orquestador")
+    public DefaultWsdl11Definition orquestadorWsdl11Definition(XsdSchema orquestadorSchema) {
+        DefaultWsdl11Definition wsdl11Definition = new DefaultWsdl11Definition();
+        wsdl11Definition.setPortTypeName("OrquestadorPort");
+        wsdl11Definition.setLocationUri("/ws");
+        wsdl11Definition.setTargetNamespace("http://aqpgo.com/orquestador");
+        wsdl11Definition.setSchema(orquestadorSchema);
+        return wsdl11Definition;
+    }
+
+    @Bean
+    public XsdSchema orquestadorSchema() {
+        return new SimpleXsdSchema(new ClassPathResource("orquestador.xsd"));
     }
 
     @Bean
