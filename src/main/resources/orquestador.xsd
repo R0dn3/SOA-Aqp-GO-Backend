@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:tns="http://aqpgo.com/orquestador" targetNamespace="http://aqpgo.com/orquestador" elementFormDefault="qualified">
+
+    <xs:element name="reservarYPagarRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="usuarioId" type="xs:string"/>
+                <xs:element name="paqueteId" type="xs:string"/>
+                <xs:element name="fechaSalida" type="xs:string"/>
+                <xs:element name="numPersonas" type="xs:int"/>
+                <xs:element name="acompanante" type="tns:acompananteItem" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="monto" type="xs:string"/>
+                <xs:element name="metodo" type="xs:string"/>
+                <xs:element name="referencia" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:complexType name="acompananteItem">
+        <xs:sequence>
+            <xs:element name="nombreCompleto" type="xs:string"/>
+            <xs:element name="dniPasaporte" type="xs:string"/>
+            <xs:element name="pais" type="xs:string" minOccurs="0"/>
+            <xs:element name="fechaNacimiento" type="xs:string" minOccurs="0"/>
+            <xs:element name="genero" type="xs:string" minOccurs="0"/>
+            <xs:element name="datosAdicionales" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="reservarYPagarResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="reservaId" type="xs:string"/>
+                <xs:element name="estadoReserva" type="xs:string"/>
+                <xs:element name="pagoId" type="xs:string"/>
+                <xs:element name="estadoPago" type="xs:string"/>
+                <xs:element name="mensaje" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
