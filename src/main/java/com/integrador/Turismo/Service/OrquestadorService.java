@@ -73,7 +73,7 @@ public class OrquestadorService {
         } else {
             reservaService.cambiarEstado(reserva.id(), Reserva.Estado.CANCELADA);
             estadoFinal = Reserva.Estado.CANCELADA.name();
-            mensaje = "Pago rechazado: el monto no coincide con el total de la reserva. Reserva cancelada automáticamente";
+            mensaje = "Pago rechazado: " + pago.motivoRechazo() + ". Reserva cancelada automáticamente";
             log.info("[Orquestador] Pago rechazado, reserva {} compensada (CANCELADA)", reserva.id());
         }
 

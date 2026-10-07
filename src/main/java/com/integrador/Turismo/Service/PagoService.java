@@ -15,8 +15,9 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class PagoService {
-    private final PagoRepository    pagoRepository;
+    private final PagoRepository pagoRepository;
     private final ReservaRepository reservaRepository;
+    private final MetodoPagoConfigService metodoPagoConfigService;
 
     @Transactional
     public PagoResponse procesarPago(PagoRequest req) {
@@ -27,8 +28,16 @@ public class PagoService {
             throw new IllegalStateException("Esta reserva ya está pagada");
         }
 
-        // Pasarela simulada: siempre aprueba si el monto coincide
-        boolean aprobado = req.monto().compareTo(reserva.getPrecioTotal()) == 0;
+        boolean montoCoincide = req.monto().compareTo(reserva.getPrecioTotal()) == 0;
+        boolean metodoHabilitado = metodoPagoConfigService.estaHabilitado(req.metodo());
+        boolean aprobado = montoCoincide && metodoHabilitado;
+
+        String motivoRechazo = null;
+        if (!aprobado) {
+            motivoRechazo = !metodoHabilitado
+                    ? "El método de pago " + req.metodo() + " no está disponible actualmente"
+                    : "El monto no coincide con el total de la reserva";
+        }
 
         Pago pago = Pago.builder()
                 .reserva(reserva)
@@ -41,7 +50,6 @@ public class PagoService {
 
         pagoRepository.save(pago);
 
-        // Si el pago fue aprobado, confirma la reserva
         if (aprobado) {
             reserva.setEstado(Reserva.Estado.CONFIRMADA);
             reservaRepository.save(reserva);
@@ -54,7 +62,7 @@ public class PagoService {
                 pago.getMetodo().name(),
                 pago.getEstado().name(),
                 pago.getReferencia(),
-                pago.getFechaPago()
-        );
+                pago.getFechaPago(),
+                motivoRechazo);
     }
 }
