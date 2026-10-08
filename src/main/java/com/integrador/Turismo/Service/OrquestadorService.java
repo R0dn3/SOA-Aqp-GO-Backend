@@ -2,18 +2,24 @@ package com.integrador.Turismo.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.integrador.Turismo.DTO.AcompananteDto;
 import com.integrador.Turismo.DTO.PagoRequest;
 import com.integrador.Turismo.DTO.PagoResponse;
 import com.integrador.Turismo.DTO.ReservaRequest;
 import com.integrador.Turismo.DTO.ReservaResponse;
+import com.integrador.Turismo.Mensajeria.ColaEsb;
+import com.integrador.Turismo.Mensajeria.EventoReserva;
 import com.integrador.Turismo.Model.Pago;
 import com.integrador.Turismo.Model.Reserva;
 import com.integrador.Turismo.Soap.AcompananteOrqItem;
@@ -35,6 +41,9 @@ import lombok.extern.slf4j.Slf4j;
  * (Splitter, Content Enricher, Content-Based Router) aplicados de forma
  * embebida. Los mensajes rechazados se guardan en dead-letter [ESB-DLQ] y
  * cada resultado se cuenta en métricas (aqpgo.esb.mensajes).
+ *
+ * Al confirmar o compensar, publica un evento en la cola del ESB
+ * ([ESB-PUBLISH]) para tareas secundarias asíncronas (pieza 5: mensajería).
  */
 @Service
 @RequiredArgsConstructor
@@ -47,6 +56,7 @@ public class OrquestadorService {
     private final PagoService pagoService;
     private final DeadLetterService deadLetterService;
     private final MeterRegistry meterRegistry;
+    private final ColaEsb colaEsb;
 
     /** Datos ya validados y convertidos a sus tipos definitivos. */
     private record DatosValidados(LocalDate fechaSalida, BigDecimal monto, Pago.Metodo metodo,
@@ -137,6 +147,7 @@ public class OrquestadorService {
             mensaje = "Pago verificado y reserva confirmada";
             contar("confirmado");
             log.info("[ESB-ROUTE] -> rama CONFIRMAR. Reserva {} pasa a CONFIRMADA", reserva.id());
+            publicarEvento(EventoReserva.Tipo.RESERVA_CONFIRMADA, reserva.id(), req.getUsuarioId(), pago.estado());
         } else {
             reservaService.cambiarEstado(reserva.id(), Reserva.Estado.CANCELADA);
             estadoFinal = Reserva.Estado.CANCELADA.name();
@@ -144,6 +155,7 @@ public class OrquestadorService {
             contar("compensado");
             log.info("[ESB-ROUTE] -> rama COMPENSAR. Motivo: {}", pago.motivoRechazo());
             log.info("[Orquestador] Pago rechazado, reserva {} compensada (CANCELADA)", reserva.id());
+            publicarEvento(EventoReserva.Tipo.RESERVA_CANCELADA, reserva.id(), req.getUsuarioId(), pago.estado());
         }
 
         ReservarYPagarResponse response = new ReservarYPagarResponse();
@@ -227,7 +239,7 @@ public class OrquestadorService {
         return new IllegalArgumentException("Solicitud inválida: " + detalle);
     }
 
-    // ── Métricas y dead-letter ───────────────────────────────────
+    // ── Métricas, dead-letter y mensajería ───────────────────────
 
     private void contar(String resultado) {
         meterRegistry.counter("aqpgo.esb.mensajes",
@@ -249,6 +261,26 @@ public class OrquestadorService {
             deadLetterService.registrar(OPERACION, tipo, motivo, contenido, req.getUsuarioId());
         } catch (RuntimeException e) {
             log.error("[ESB-DLQ] No se pudo guardar el mensaje en dead-letter: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Publica el evento DESPUÉS del commit: así el consumidor ve la reserva ya
+     * guardada, y si la transacción se revierte no sale ningún evento.
+     */
+    private void publicarEvento(EventoReserva.Tipo tipo, Object reservaId, String usuarioId, String estadoPago) {
+        EventoReserva evento = new EventoReserva(tipo, String.valueOf(reservaId), usuarioId,
+                estadoPago, MDC.get("correlationId"), LocalDateTime.now());
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    colaEsb.publicar(evento);
+                }
+            });
+        } else {
+            colaEsb.publicar(evento);
         }
     }
 }

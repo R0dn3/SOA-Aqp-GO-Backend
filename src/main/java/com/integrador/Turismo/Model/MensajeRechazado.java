@@ -1,3 +1,4 @@
+//Model/MensajeRechazado.java
 package com.integrador.Turismo.Model;
 
 import jakarta.persistence.*;
@@ -24,7 +25,7 @@ public class MensajeRechazado {
     @Column(nullable = false, length = 60)
     private String operacion;
 
-    /** VALIDACION | FALLO_TECNICO */
+    /** VALIDACION | FALLO_TECNICO | FALLO_COLA */
     @Column(nullable = false, length = 30)
     private String tipo;
 
