@@ -1,20 +1,26 @@
+//ReservaEndpoint.java
 package com.integrador.Turismo.Soap;
 
 import com.integrador.Turismo.DTO.AcompananteDto;
+import com.integrador.Turismo.DTO.ReservaRequest;
 import com.integrador.Turismo.DTO.ReservaResponse;
+import com.integrador.Turismo.Model.Usuario;
 import com.integrador.Turismo.Service.ReservaService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
 import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
 import org.springframework.ws.server.endpoint.annotation.RequestPayload;
 import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
-import com.integrador.Turismo.DTO.ReservaRequest;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 @Endpoint
 @RequiredArgsConstructor
+@Slf4j
 public class ReservaEndpoint {
 
     private static final String NAMESPACE_URI = "http://aqpgo.com/reservas";
@@ -24,6 +30,22 @@ public class ReservaEndpoint {
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "consultarReservaRequest")
     @ResponsePayload
     public ConsultarReservaResponse consultarReserva(@RequestPayload ConsultarReservaRequest request) {
+        Usuario usuario = SoapAuth.usuarioAutenticado("consultarReserva");
+        if (request.getId() == null || request.getId().isBlank()) {
+            throw new IllegalArgumentException("Solicitud inválida: id es obligatorio");
+        }
+        // [ESB-SECURITY] Un cliente solo ve sus reservas; el ADMIN puede ver
+        // cualquiera.
+        if (usuario.getRol() != Usuario.Rol.ADMIN) {
+            boolean esSuya = reservaService.misReservas(usuario.getId()).stream()
+                    .anyMatch(r -> r.id().equals(request.getId()));
+            if (!esSuya) {
+                log.warn("[ESB-SECURITY] usuarioId={} intentó consultar la reserva {} que no le pertenece",
+                        usuario.getId(), request.getId());
+                throw new AccessDeniedException("No autorizado: la reserva no pertenece al usuario");
+            }
+        }
+
         ReservaResponse reserva = reservaService.obtenerPorId(request.getId());
 
         ConsultarReservaResponse response = new ConsultarReservaResponse();
@@ -56,6 +78,9 @@ public class ReservaEndpoint {
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "crearReservaRequest")
     @ResponsePayload
     public CrearReservaResponse crearReserva(@RequestPayload CrearReservaRequest request) {
+        Usuario usuario = SoapAuth.usuarioAutenticado("crearReserva");
+        String usuarioId = SoapAuth.usuarioId(usuario, request.getUsuarioId(), "crearReserva");
+
         List<AcompananteDto> acompanantes = new ArrayList<>();
         for (AcompananteItem ai : request.getAcompanante()) {
             acompanantes.add(new AcompananteDto(
@@ -75,7 +100,7 @@ public class ReservaEndpoint {
                 request.getNumPersonas(),
                 acompanantes);
 
-        ReservaResponse reserva = reservaService.crear(req, request.getUsuarioId());
+        ReservaResponse reserva = reservaService.crear(req, usuarioId);
 
         CrearReservaResponse response = new CrearReservaResponse();
         response.setId(reserva.id());
@@ -91,7 +116,10 @@ public class ReservaEndpoint {
     @ResponsePayload
     public ListarReservasPorUsuarioResponse listarReservasPorUsuario(
             @RequestPayload ListarReservasPorUsuarioRequest request) {
-        List<ReservaResponse> reservas = reservaService.misReservas(request.getUsuarioId());
+        Usuario usuario = SoapAuth.usuarioAutenticado("listarReservasPorUsuario");
+        String usuarioId = SoapAuth.usuarioId(usuario, request.getUsuarioId(), "listarReservasPorUsuario");
+
+        List<ReservaResponse> reservas = reservaService.misReservas(usuarioId);
 
         List<ReservaItem> items = new ArrayList<>();
         for (ReservaResponse r : reservas) {

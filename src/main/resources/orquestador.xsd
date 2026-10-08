@@ -2,6 +2,17 @@
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
     xmlns:tns="http://aqpgo.com/orquestador" targetNamespace="http://aqpgo.com/orquestador" elementFormDefault="qualified">
 
+    <xs:complexType name="acompananteOrq">
+        <xs:sequence>
+            <xs:element name="nombreCompleto" type="xs:string"/>
+            <xs:element name="dniPasaporte" type="xs:string" minOccurs="0"/>
+            <xs:element name="pais" type="xs:string" minOccurs="0"/>
+            <xs:element name="fechaNacimiento" type="xs:string" minOccurs="0"/>
+            <xs:element name="genero" type="xs:string" minOccurs="0"/>
+            <xs:element name="datosAdicionales" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:element name="reservarYPagarRequest">
         <xs:complexType>
             <xs:sequence>
@@ -9,6 +20,7 @@
                 <xs:element name="paqueteId" type="xs:string"/>
                 <xs:element name="fechaSalida" type="xs:string"/>
                 <xs:element name="numPersonas" type="xs:int"/>
+                <xs:element name="acompanante" type="tns:acompananteOrq" minOccurs="0" maxOccurs="unbounded"/>
                 <xs:element name="monto" type="xs:string"/>
                 <xs:element name="metodo" type="xs:string"/>
                 <xs:element name="referencia" type="xs:string"/>

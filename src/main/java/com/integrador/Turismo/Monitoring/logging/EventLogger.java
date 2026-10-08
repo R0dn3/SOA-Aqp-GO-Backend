@@ -1,3 +1,4 @@
+// Monitoring/logging/EventLogger.java
 package com.integrador.Turismo.Monitoring.logging;
 
 import io.sentry.Sentry;
@@ -12,9 +13,7 @@ import java.util.UUID;
 @Component
 public class EventLogger {
 
-
-    private static final Logger logger =
-            LoggerFactory.getLogger(EventLogger.class);
+    private static final Logger logger = LoggerFactory.getLogger(EventLogger.class);
 
     /**
      * Punto único de entrada para registrar eventos.
@@ -32,8 +31,7 @@ public class EventLogger {
                 event.getHttpMethod(),
                 event.getEndpoint(),
                 event.getStatusCode(),
-                event.getExecutionTime()
-        );
+                event.getExecutionTime());
 
         switch (event.getSeverity()) {
 
@@ -52,10 +50,7 @@ public class EventLogger {
             Sentry.withScope(scope -> {
 
                 scope.setLevel(
-                        event.getSeverity() == EventSeverity.CRITICAL ?
-                                SentryLevel.FATAL :
-                                SentryLevel.ERROR
-                );
+                        event.getSeverity() == EventSeverity.CRITICAL ? SentryLevel.FATAL : SentryLevel.ERROR);
 
                 scope.setTag("eventId", event.getEventId());
 
@@ -76,8 +71,7 @@ public class EventLogger {
                 if (event.getExecutionTime() != null)
                     scope.setExtra(
                             "executionTime",
-                            String.valueOf(event.getExecutionTime())
-                    );
+                            String.valueOf(event.getExecutionTime()));
 
                 if (event.getUsername() != null)
                     scope.setTag("username", event.getUsername());

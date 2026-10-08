@@ -1,3 +1,4 @@
+// src/main/java/com/integrador/Turismo/Config/WsConfig.java
 package com.integrador.Turismo.Config;
 
 import org.springframework.boot.web.servlet.ServletRegistrationBean;

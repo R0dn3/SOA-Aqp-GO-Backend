@@ -1,3 +1,4 @@
+// Monitoring/logging/EventType.java
 package com.integrador.Turismo.Monitoring.logging;
 
 public enum EventType {

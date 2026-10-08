@@ -1,12 +1,12 @@
+//ReporteEndpoint.java
 package com.integrador.Turismo.Soap;
 
 import com.integrador.Turismo.DTO.ResumenReportesDto;
 import com.integrador.Turismo.Model.Usuario;
-import com.integrador.Turismo.Repository.UsuarioRepository;
-import com.integrador.Turismo.Security.JwtService;
 import com.integrador.Turismo.Service.ReporteService;
-import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.ws.server.endpoint.annotation.Endpoint;
 import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
 import org.springframework.ws.server.endpoint.annotation.RequestPayload;
@@ -14,29 +14,22 @@ import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
 
 @Endpoint
 @RequiredArgsConstructor
+@Slf4j
 public class ReporteEndpoint {
 
     private static final String NAMESPACE_URI = "http://aqpgo.com/reportes";
 
     private final ReporteService reporteService;
-    private final JwtService jwtService;
-    private final UsuarioRepository usuarioRepository;
 
     @PayloadRoot(namespace = NAMESPACE_URI, localPart = "resumenReportesRequest")
     @ResponsePayload
     public ResumenReportesResponse resumenReportes(@RequestPayload ResumenReportesRequest request) {
-        String email;
-        try {
-            email = jwtService.extractEmail(request.getToken());
-        } catch (JwtException e) {
-            throw new RuntimeException("Token inválido o expirado");
-        }
+        Usuario usuario = SoapAuth.usuarioAutenticado("resumenReportes");
 
-        Usuario usuario = usuarioRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
+        // [ESB-SECURITY] Autorización por rol: solo ADMIN.
         if (usuario.getRol() != Usuario.Rol.ADMIN) {
-            throw new RuntimeException("No autorizado: se requiere rol ADMIN");
+            log.warn("[ESB-SECURITY] usuarioId={} sin rol ADMIN intentó pedir resumenReportes", usuario.getId());
+            throw new AccessDeniedException("No autorizado: se requiere rol ADMIN");
         }
 
         ResumenReportesDto resumen = reporteService.obtenerReportesCompletos().resumen();

@@ -1,4 +1,6 @@
+// src/main/java/com/integrador/Turismo/Model/Reserva.java
 package com.integrador.Turismo.Model;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -11,8 +13,10 @@ import java.util.List;
 
 @Entity
 @Table(name = "reservas")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Reserva {
     @Id

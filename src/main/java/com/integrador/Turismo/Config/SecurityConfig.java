@@ -1,3 +1,4 @@
+//Security/SecurityConfig.java
 package com.integrador.Turismo.Config;
 
 import java.util.List;
@@ -51,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers("/api/test").permitAll()
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/api/esb/**").permitAll()
 
                         // ── Públicas ──────────────────────────────────────────
                         .requestMatchers("/api/auth/**").permitAll() // login, register
