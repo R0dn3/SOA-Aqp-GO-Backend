@@ -1,3 +1,4 @@
+//Model/Usuario.java
 package com.integrador.Turismo.Model;
 
 import jakarta.persistence.*;
@@ -13,8 +14,10 @@ import java.util.Collection;
 import java.util.List;
 
 @Entity
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 @Table(name = "usuarios")
 public class Usuario implements UserDetails {
@@ -68,12 +71,27 @@ public class Usuario implements UserDetails {
         return email;
     }
 
-    @Override public boolean isAccountNonExpired()    { return true; }
-    @Override public boolean isAccountNonLocked()     { return true; }
-    @Override public boolean isCredentialsNonExpired(){ return true; }
-    @Override public boolean isEnabled()              { return true; }
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return true;
+    }
 
     public enum Rol {
-        CLIENTE,OPERADOR,ADMIN
+        CLIENTE, OPERADOR, ADMIN
     }
 }

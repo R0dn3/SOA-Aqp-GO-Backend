@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import com.integrador.Turismo.Mensajeria.ColaEsb;
 import com.integrador.Turismo.Mensajeria.EventoReserva;
 import com.integrador.Turismo.Model.Pago;
 import com.integrador.Turismo.Model.Reserva;
+import com.integrador.Turismo.Repository.PagoRepository;
 import com.integrador.Turismo.Soap.AcompananteOrqItem;
 import com.integrador.Turismo.Soap.ReservarYPagarRequest;
 import com.integrador.Turismo.Soap.ReservarYPagarResponse;
@@ -42,6 +44,9 @@ import lombok.extern.slf4j.Slf4j;
  * embebida. Los mensajes rechazados se guardan en dead-letter [ESB-DLQ] y
  * cada resultado se cuenta en métricas (aqpgo.esb.mensajes).
  *
+ * [ESB-IDEMPOTENCIA]: si la referencia ya tiene un pago VERIFICADO, no se
+ * repite la operación; se devuelve el resultado anterior.
+ *
  * Al confirmar o compensar, publica un evento en la cola del ESB
  * ([ESB-PUBLISH]) para tareas secundarias asíncronas (pieza 5: mensajería).
  */
@@ -57,6 +62,7 @@ public class OrquestadorService {
     private final DeadLetterService deadLetterService;
     private final MeterRegistry meterRegistry;
     private final ColaEsb colaEsb;
+    private final PagoRepository pagoRepository;
 
     /** Datos ya validados y convertidos a sus tipos definitivos. */
     private record DatosValidados(LocalDate fechaSalida, BigDecimal monto, Pago.Metodo metodo,
@@ -88,6 +94,13 @@ public class OrquestadorService {
         }
         log.info("[ESB-VALIDATE] Mensaje válido (formato y reglas básicas). usuarioId={}, paqueteId={}",
                 req.getUsuarioId(), req.getPaqueteId());
+
+        // [ESB-IDEMPOTENCIA] Si esta referencia ya fue cobrada, no se repite la
+        // operación.
+        ReservarYPagarResponse repetida = respuestaSiYaCobrado(req);
+        if (repetida != null) {
+            return repetida;
+        }
 
         // [ESB-SPLIT] El mensaje compuesto se divide; primer sub-mensaje:
         // ReservaRequest (incluye los acompañantes).
@@ -165,6 +178,50 @@ public class OrquestadorService {
         response.setEstadoPago(pago.estado());
         response.setMensaje(mensaje);
         return response;
+    }
+
+    /**
+     * [ESB-IDEMPOTENCIA] Revisa si la referencia ya tiene un pago VERIFICADO.
+     * Si lo tiene, devuelve el resultado anterior (no se repite la operación);
+     * si no, devuelve null y el flujo continúa normalmente.
+     */
+    private ReservarYPagarResponse respuestaSiYaCobrado(ReservarYPagarRequest req) {
+        String ref = req.getReferencia();
+        if (ref == null || ref.isBlank()) {
+            log.info("[ESB-IDEMPOTENCIA] Mensaje sin referencia: no se puede revisar duplicados. Se continúa.");
+            return null;
+        }
+
+        log.info("[ESB-IDEMPOTENCIA] Revisando si la referencia {} ya fue cobrada...", ref);
+        Optional<Pago> previo = pagoRepository.findFirstByReferenciaAndEstado(ref, Pago.Estado.VERIFICADO);
+        if (previo.isEmpty()) {
+            log.info("[ESB-IDEMPOTENCIA] Referencia {} no repetida. Se continúa con el flujo.", ref);
+            return null;
+        }
+
+        Pago p = previo.get();
+        Reserva r = p.getReserva();
+
+        // La referencia de otro usuario nunca se reutiliza: se rechaza como validación.
+        if (!r.getUsuario().getId().equals(req.getUsuarioId())) {
+            contar("rechazado_validacion");
+            IllegalArgumentException ex = rechazo("referencia ya utilizada por otra operación");
+            registrarDeadLetter("VALIDACION", ex.getMessage(), req);
+            throw ex;
+        }
+
+        contar("repetido");
+        log.info(
+                "[ESB-IDEMPOTENCIA] Referencia {} ya cobrada (pago {}, reserva {}). No se crea reserva ni cobro nuevo.",
+                ref, p.getId(), r.getId());
+
+        ReservarYPagarResponse resp = new ReservarYPagarResponse();
+        resp.setReservaId(r.getId());
+        resp.setEstadoReserva(r.getEstado().name());
+        resp.setPagoId(p.getId());
+        resp.setEstadoPago(p.getEstado().name());
+        resp.setMensaje("Operación ya procesada anteriormente (referencia " + ref + ")");
+        return resp;
     }
 
     /** [ESB-VALIDATE] Valida y convierte los campos del mensaje compuesto. */

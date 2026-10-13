@@ -1,5 +1,7 @@
+//DeadLetterService.java
 package com.integrador.Turismo.Service;
 
+import com.integrador.Turismo.Mensajeria.EventoReserva;
 import com.integrador.Turismo.Model.MensajeRechazado;
 import com.integrador.Turismo.Repository.MensajeRechazadoRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,11 +30,44 @@ public class DeadLetterService {
                 .correlationId(MDC.get("correlationId"))
                 .operacion(operacion)
                 .tipo(tipo)
-                .motivo(motivo != null && motivo.length() > 500 ? motivo.substring(0, 500) : motivo)
+                .motivo(recortar(motivo))
                 .contenido(contenido)
                 .usuarioId(usuarioId)
                 .build();
         repository.save(m);
         log.info("[ESB-DLQ] Mensaje guardado en dead-letter. tipo={}, motivo={}", tipo, motivo);
+    }
+
+    /**
+     * Guarda un evento que un suscriptor no pudo procesar tras agotar los
+     * reintentos. Conserva el evento completo para poder reprocesarlo.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void registrarFalloCola(String operacion, String suscriptor,
+            EventoReserva evento, String motivo) {
+        String contenido = "tipo=" + evento.tipo()
+                + ", reservaId=" + evento.reservaId()
+                + ", estadoPago=" + evento.estadoPago()
+                + ", creadoEn=" + evento.creadoEn();
+
+        MensajeRechazado m = MensajeRechazado.builder()
+                .correlationId(evento.correlationId() != null ? evento.correlationId() : MDC.get("correlationId"))
+                .operacion(operacion)
+                .tipo("FALLO_COLA")
+                .motivo(recortar(motivo))
+                .contenido(contenido)
+                .usuarioId(evento.usuarioId())
+                .suscriptor(suscriptor)
+                .eventoTipo(evento.tipo().name())
+                .reservaId(evento.reservaId())
+                .estadoPago(evento.estadoPago())
+                .build();
+        repository.save(m);
+        log.info("[ESB-DLQ] Mensaje guardado en dead-letter. tipo=FALLO_COLA, suscriptor={}, motivo={}",
+                suscriptor, motivo);
+    }
+
+    private String recortar(String motivo) {
+        return motivo != null && motivo.length() > 500 ? motivo.substring(0, 500) : motivo;
     }
 }

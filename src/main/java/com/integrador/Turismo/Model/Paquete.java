@@ -1,3 +1,4 @@
+//Model/Paquete.java
 package com.integrador.Turismo.Model;
 
 import jakarta.persistence.*;

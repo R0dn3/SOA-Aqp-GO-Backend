@@ -38,6 +38,31 @@ public class MensajeRechazado {
     @Column(name = "usuario_id", length = 64)
     private String usuarioId;
 
+    // ── Datos para poder reprocesar un FALLO_COLA (nulos en los demás tipos) ──
+
+    /**
+     * Suscriptor que falló (Notificaciones, Auditoría) o TODOS si la cola estaba
+     * llena.
+     */
+    @Column(length = 40)
+    private String suscriptor;
+
+    @Column(name = "evento_tipo", length = 30)
+    private String eventoTipo;
+
+    @Column(name = "reserva_id", length = 64)
+    private String reservaId;
+
+    @Column(name = "estado_pago", length = 30)
+    private String estadoPago;
+
+    /** null = pendiente | REPROCESADO | FALLIDO_DE_NUEVO */
+    @Column(name = "estado_reproceso", length = 20)
+    private String estadoReproceso;
+
+    @Column(name = "reprocesado_en")
+    private LocalDateTime reprocesadoEn;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

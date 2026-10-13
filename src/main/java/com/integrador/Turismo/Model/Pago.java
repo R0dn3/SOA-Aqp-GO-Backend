@@ -1,4 +1,6 @@
+// src/main/java/com/integrador/Turismo/Model/Pago.java
 package com.integrador.Turismo.Model;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
@@ -8,8 +10,10 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "pagos")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Pago {
     @Id
