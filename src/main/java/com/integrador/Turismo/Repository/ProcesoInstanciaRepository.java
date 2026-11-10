@@ -9,4 +9,6 @@ import com.integrador.Turismo.Model.ProcesoInstancia;
 public interface ProcesoInstanciaRepository extends JpaRepository<ProcesoInstancia, String> {
 
     List<ProcesoInstancia> findTop50ByOrderByInicioDesc();
+
+    List<ProcesoInstancia> findTop200ByOrderByInicioDesc();
 }
