@@ -1,12 +1,16 @@
+//Model\Proveedor.java
 package com.integrador.Turismo.Model;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
 @Entity
 @Table(name = "proveedores")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Proveedor {
     @Id

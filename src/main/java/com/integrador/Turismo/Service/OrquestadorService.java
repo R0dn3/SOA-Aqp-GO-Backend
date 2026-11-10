@@ -1,3 +1,4 @@
+//OrquestadorService.java
 package com.integrador.Turismo.Service;
 
 import java.math.BigDecimal;
@@ -49,6 +50,9 @@ import lombok.extern.slf4j.Slf4j;
  *
  * Al confirmar o compensar, publica un evento en la cola del ESB
  * ([ESB-PUBLISH]) para tareas secundarias asíncronas (pieza 5: mensajería).
+ *
+ * [BPM]: cada ejecución deja una traza (instancia + pasos) para el seguimiento
+ * del proceso y el panel BAM. La traza nunca interfiere con el flujo.
  */
 @Service
 @RequiredArgsConstructor
@@ -63,6 +67,7 @@ public class OrquestadorService {
     private final MeterRegistry meterRegistry;
     private final ColaEsb colaEsb;
     private final PagoRepository pagoRepository;
+    private final ProcesoTracker procesoTracker; // [BPM]
 
     /** Datos ya validados y convertidos a sus tipos definitivos. */
     private record DatosValidados(LocalDate fechaSalida, BigDecimal monto, Pago.Metodo metodo,
@@ -73,14 +78,19 @@ public class OrquestadorService {
     public ReservarYPagarResponse reservarYPagar(ReservarYPagarRequest req) {
         Timer.Sample sample = Timer.start(meterRegistry);
         contar("recibido");
+        ProcesoTracker.Traza traza = procesoTracker.iniciar(OPERACION, req.getUsuarioId()); // [BPM]
         try {
-            return ejecutar(req);
+            return ejecutar(req, traza);
+        } catch (RuntimeException ex) {
+            traza.excepcion(ex.getMessage()); // [BPM] solo actúa si nadie fijó un estado final
+            throw ex;
         } finally {
             sample.stop(meterRegistry.timer("aqpgo.esb.orquestacion.duracion", "operacion", OPERACION));
+            procesoTracker.guardar(traza); // [BPM] nunca lanza excepciones
         }
     }
 
-    private ReservarYPagarResponse ejecutar(ReservarYPagarRequest req) {
+    private ReservarYPagarResponse ejecutar(ReservarYPagarRequest req, ProcesoTracker.Traza traza) {
 
         // [ESB-VALIDATE] Se valida lo más temprano posible, ANTES de invocar a
         // ningún servicio miembro: un mensaje inválido no crea nada.
@@ -90,14 +100,17 @@ public class OrquestadorService {
         } catch (IllegalArgumentException ex) {
             contar("rechazado_validacion");
             registrarDeadLetter("VALIDACION", ex.getMessage(), req);
+            traza.paso("ESB-VALIDATE", "ERROR", ex.getMessage()); // [BPM]
+            traza.estado("RECHAZADO", ex.getMessage()); // [BPM]
             throw ex;
         }
         log.info("[ESB-VALIDATE] Mensaje válido (formato y reglas básicas). usuarioId={}, paqueteId={}",
                 req.getUsuarioId(), req.getPaqueteId());
+        traza.paso("ESB-VALIDATE", "OK", "Formato y reglas básicas correctos"); // [BPM]
 
         // [ESB-IDEMPOTENCIA] Si esta referencia ya fue cobrada, no se repite la
         // operación.
-        ReservarYPagarResponse repetida = respuestaSiYaCobrado(req);
+        ReservarYPagarResponse repetida = respuestaSiYaCobrado(req, traza);
         if (repetida != null) {
             return repetida;
         }
@@ -117,6 +130,8 @@ public class OrquestadorService {
         // Paso 1: Crear reserva (delega en ReservaService)
         ReservaResponse reserva = reservaService.crear(reservaReq, req.getUsuarioId());
         log.info("[Orquestador] Reserva creada: {}", reserva.id());
+        traza.reserva(String.valueOf(reserva.id())); // [BPM]
+        traza.paso("ESB-SPLIT", "OK", "Mensaje dividido y reserva creada"); // [BPM]
 
         // [ESB-SPLIT] segundo sub-mensaje + [ESB-ENRICH]: se añade el reservaId,
         // dato que el cliente nunca envió.
@@ -124,6 +139,7 @@ public class OrquestadorService {
         log.info(
                 "[ESB-ENRICH] PagoRequest enriquecido con reservaId={} (dato no provisto por el cliente, obtenido del paso anterior)",
                 reserva.id());
+        traza.paso("ESB-ENRICH", "OK", "PagoRequest enriquecido con el reservaId"); // [BPM]
 
         // Paso 2: Cobrar pago (delega en PagoService)
         PagoResponse pago;
@@ -144,7 +160,17 @@ public class OrquestadorService {
             contar("fallo_tecnico");
             registrarDeadLetter("FALLO_TECNICO", ex.getMessage(), req);
             reservaService.cambiarEstado(reserva.id(), Reserva.Estado.CANCELADA);
+            traza.paso("ESB-OPERATE", "ERROR", "Fallo técnico en el pago: " + ex.getMessage()); // [BPM]
+            traza.paso("COMPENSACION", "COMPENSADO", "Reserva cancelada tras el fallo técnico"); // [BPM]
+            traza.estado("FALLIDO", ex.getMessage()); // [BPM]
             throw ex;
+        }
+
+        boolean pagoVerificado = "VERIFICADO".equals(pago.estado());
+        if (pagoVerificado) { // [BPM]
+            traza.paso("ESB-OPERATE", "OK", "Pago " + pago.estado());
+        } else {
+            traza.paso("ESB-OPERATE", "ERROR", "Pago rechazado: " + pago.motivoRechazo());
         }
 
         // [ESB-ROUTE] Content-Based Router: el destino del flujo depende del
@@ -155,12 +181,15 @@ public class OrquestadorService {
         String mensaje;
         String estadoFinal;
 
-        if ("VERIFICADO".equals(pago.estado())) {
+        if (pagoVerificado) {
             estadoFinal = Reserva.Estado.CONFIRMADA.name();
             mensaje = "Pago verificado y reserva confirmada";
             contar("confirmado");
             log.info("[ESB-ROUTE] -> rama CONFIRMAR. Reserva {} pasa a CONFIRMADA", reserva.id());
+            traza.paso("ESB-ROUTE", "OK", "Rama CONFIRMAR"); // [BPM]
             publicarEvento(EventoReserva.Tipo.RESERVA_CONFIRMADA, reserva.id(), req.getUsuarioId(), pago.estado());
+            traza.paso("ESB-PUBLISH", "OK", "Evento RESERVA_CONFIRMADA enviado al bus"); // [BPM]
+            traza.estado("COMPLETADO", mensaje); // [BPM]
         } else {
             reservaService.cambiarEstado(reserva.id(), Reserva.Estado.CANCELADA);
             estadoFinal = Reserva.Estado.CANCELADA.name();
@@ -168,7 +197,10 @@ public class OrquestadorService {
             contar("compensado");
             log.info("[ESB-ROUTE] -> rama COMPENSAR. Motivo: {}", pago.motivoRechazo());
             log.info("[Orquestador] Pago rechazado, reserva {} compensada (CANCELADA)", reserva.id());
+            traza.paso("ESB-ROUTE", "COMPENSADO", "Rama COMPENSAR: reserva cancelada"); // [BPM]
             publicarEvento(EventoReserva.Tipo.RESERVA_CANCELADA, reserva.id(), req.getUsuarioId(), pago.estado());
+            traza.paso("ESB-PUBLISH", "OK", "Evento RESERVA_CANCELADA enviado al bus"); // [BPM]
+            traza.estado("COMPENSADO", mensaje); // [BPM]
         }
 
         ReservarYPagarResponse response = new ReservarYPagarResponse();
@@ -185,10 +217,11 @@ public class OrquestadorService {
      * Si lo tiene, devuelve el resultado anterior (no se repite la operación);
      * si no, devuelve null y el flujo continúa normalmente.
      */
-    private ReservarYPagarResponse respuestaSiYaCobrado(ReservarYPagarRequest req) {
+    private ReservarYPagarResponse respuestaSiYaCobrado(ReservarYPagarRequest req, ProcesoTracker.Traza traza) {
         String ref = req.getReferencia();
         if (ref == null || ref.isBlank()) {
             log.info("[ESB-IDEMPOTENCIA] Mensaje sin referencia: no se puede revisar duplicados. Se continúa.");
+            traza.paso("ESB-IDEMPOTENCIA", "OMITIDO", "Mensaje sin referencia"); // [BPM]
             return null;
         }
 
@@ -196,6 +229,7 @@ public class OrquestadorService {
         Optional<Pago> previo = pagoRepository.findFirstByReferenciaAndEstado(ref, Pago.Estado.VERIFICADO);
         if (previo.isEmpty()) {
             log.info("[ESB-IDEMPOTENCIA] Referencia {} no repetida. Se continúa con el flujo.", ref);
+            traza.paso("ESB-IDEMPOTENCIA", "OK", "Referencia no repetida"); // [BPM]
             return null;
         }
 
@@ -207,6 +241,8 @@ public class OrquestadorService {
             contar("rechazado_validacion");
             IllegalArgumentException ex = rechazo("referencia ya utilizada por otra operación");
             registrarDeadLetter("VALIDACION", ex.getMessage(), req);
+            traza.paso("ESB-IDEMPOTENCIA", "ERROR", ex.getMessage()); // [BPM]
+            traza.estado("RECHAZADO", ex.getMessage()); // [BPM]
             throw ex;
         }
 
@@ -214,6 +250,9 @@ public class OrquestadorService {
         log.info(
                 "[ESB-IDEMPOTENCIA] Referencia {} ya cobrada (pago {}, reserva {}). No se crea reserva ni cobro nuevo.",
                 ref, p.getId(), r.getId());
+        traza.reserva(String.valueOf(r.getId())); // [BPM]
+        traza.paso("ESB-IDEMPOTENCIA", "OK", "Referencia ya cobrada: se devuelve el resultado anterior"); // [BPM]
+        traza.estado("REPETIDO", "Operación ya procesada anteriormente (referencia " + ref + ")"); // [BPM]
 
         ReservarYPagarResponse resp = new ReservarYPagarResponse();
         resp.setReservaId(r.getId());

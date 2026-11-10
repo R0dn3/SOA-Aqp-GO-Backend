@@ -56,6 +56,9 @@ dependencies {
 	implementation("org.glassfish.jaxb:jaxb-runtime:4.0.5")
 	implementation("com.sun.xml.messaging.saaj:saaj-impl:3.0.4")
 
+	// RabbitMQ
+	implementation("org.springframework.boot:spring-boot-starter-amqp")
+
 }
 
 // Resuelve la duplicación física de esquemas XSD compilados en las librerías del empaquetado BOOT-INF

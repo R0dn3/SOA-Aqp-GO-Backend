@@ -1,12 +1,16 @@
+//Model\Paqueteproveedor.java
 package com.integrador.Turismo.Model;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
 @Table(name = "paquete_proveedores")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Paqueteproveedor {
     @Id

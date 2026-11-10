@@ -1,3 +1,4 @@
+//SuscriptorAuditoria.java
 package com.integrador.Turismo.Mensajeria;
 
 import java.util.List;

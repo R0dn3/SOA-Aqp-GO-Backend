@@ -8,6 +8,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import org.slf4j.MDC;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -20,13 +22,13 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Cola en memoria del ESB (pieza 5: mensajería). Un hilo consumidor
- * ("esb-cola")
- * toma cada evento y lo reparte a TODOS los suscriptores interesados
- * (coreografía). Cada suscriptor trabaja en su propio hilo, con sus propios
- * reintentos y su propio dead letter: si uno falla, los demás no se enteran.
- * No es un broker: si el backend se reinicia, los mensajes pendientes se
- * pierden.
+ * Mensajería del ESB (pieza 5). Dos modos, según aqpgo.esb.broker:
+ * - "rabbit": publica el evento en RabbitMQ (exchange fanout, una cola por
+ * suscriptor). Cada suscriptor lo consume en su propio hilo (coreografía).
+ * - "memoria": cola en memoria con un hilo consumidor que reparte a todos los
+ * suscriptores interesados.
+ * En ambos modos cada suscriptor tiene sus propios reintentos y su propio dead
+ * letter: si uno falla, los demás no se enteran.
  */
 @Component
 @Slf4j
@@ -38,6 +40,8 @@ public class ColaEsb {
     private final List<SuscriptorEsb> suscriptores;
     private final DeadLetterService deadLetterService;
     private final MeterRegistry meterRegistry;
+    private final ObjectProvider<RabbitTemplate> rabbitTemplate;
+    private final boolean modoBroker;
     private final int maxReintentos;
     private final long esperaBaseMs;
 
@@ -48,12 +52,16 @@ public class ColaEsb {
     public ColaEsb(List<SuscriptorEsb> suscriptores,
             DeadLetterService deadLetterService,
             MeterRegistry meterRegistry,
+            ObjectProvider<RabbitTemplate> rabbitTemplate,
+            @Value("${aqpgo.esb.broker:memoria}") String broker,
             @Value("${aqpgo.esb.cola.capacidad:100}") int capacidad,
             @Value("${aqpgo.esb.cola.max-reintentos:3}") int maxReintentos,
             @Value("${aqpgo.esb.cola.espera-ms:1000}") long esperaBaseMs) {
         this.suscriptores = suscriptores;
         this.deadLetterService = deadLetterService;
         this.meterRegistry = meterRegistry;
+        this.rabbitTemplate = rabbitTemplate;
+        this.modoBroker = "rabbit".equalsIgnoreCase(broker);
         this.maxReintentos = maxReintentos;
         this.esperaBaseMs = esperaBaseMs;
         this.cola = new LinkedBlockingQueue<>(capacidad);
@@ -63,6 +71,13 @@ public class ColaEsb {
     @PostConstruct
     void iniciar() {
         activo = true;
+        if (modoBroker) {
+            log.info(
+                    "[ESB-QUEUE] Modo BROKER (RabbitMQ): exchange={}, reintentos={}, espera base={} ms, suscriptores={}",
+                    RabbitConfig.EXCHANGE, maxReintentos, esperaBaseMs,
+                    suscriptores.stream().map(SuscriptorEsb::nombre).toList());
+            return;
+        }
         entregas = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "esb-sub");
             t.setDaemon(true);
@@ -71,7 +86,7 @@ public class ColaEsb {
         consumidor = new Thread(this::consumir, "esb-cola");
         consumidor.setDaemon(true);
         consumidor.start();
-        log.info("[ESB-QUEUE] Consumidor iniciado (reintentos={}, espera base={} ms, suscriptores={})",
+        log.info("[ESB-QUEUE] Modo MEMORIA: consumidor iniciado (reintentos={}, espera base={} ms, suscriptores={})",
                 maxReintentos, esperaBaseMs, suscriptores.stream().map(SuscriptorEsb::nombre).toList());
     }
 
@@ -91,10 +106,13 @@ public class ColaEsb {
      */
     public void publicar(EventoReserva evento) {
         try {
-            // Se registra ANTES de encolar para que siempre salga antes del [ESB-QUEUE]
-            // del consumidor.
-            log.info("[ESB-PUBLISH] Publicando evento {} en la cola (reservaId={})",
-                    evento.tipo(), evento.reservaId());
+            // Se registra ANTES de enviar para que siempre salga antes del [ESB-QUEUE].
+            log.info("[ESB-PUBLISH] Publicando evento {} en {} (reservaId={})",
+                    evento.tipo(), modoBroker ? "RabbitMQ" : "la cola", evento.reservaId());
+            if (modoBroker) {
+                publicarEnBroker(evento);
+                return;
+            }
             if (cola.offer(evento)) {
                 contar(evento, "cola", "publicado");
             } else {
@@ -105,6 +123,63 @@ public class ColaEsb {
             }
         } catch (RuntimeException e) {
             log.error("[ESB-PUBLISH] No se pudo publicar el evento: {}", e.getMessage());
+        }
+    }
+
+    private void publicarEnBroker(EventoReserva evento) {
+        RabbitTemplate template = rabbitTemplate.getIfAvailable();
+        if (template == null) {
+            contar(evento, "broker", "rechazado");
+            registrarDeadLetter("TODOS", evento, "RabbitMQ no está configurado");
+            return;
+        }
+        try {
+            template.convertAndSend(RabbitConfig.EXCHANGE, "", EventoJson.escribir(evento));
+            contar(evento, "broker", "publicado");
+        } catch (RuntimeException e) {
+            contar(evento, "broker", "rechazado");
+            log.error("[ESB-QUEUE] RabbitMQ no disponible: evento {} de la reserva {} no se pudo publicar: {}",
+                    evento.tipo(), evento.reservaId(), e.getMessage());
+            registrarDeadLetter("TODOS", evento, "RabbitMQ no disponible: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lo llama el consumidor de RabbitMQ de cada suscriptor cuando recibe un
+     * mensaje de su cola. Aplica los reintentos y, si se agotan, el dead letter.
+     * Nunca lanza excepciones: así el mensaje se confirma (ack) y no se reencola.
+     */
+    public void recibirDelBroker(String nombreSuscriptor, String cuerpo) {
+        EventoReserva evento;
+        try {
+            evento = EventoJson.leer(cuerpo);
+        } catch (RuntimeException e) {
+            log.error("[ESB-QUEUE] Mensaje ilegible en la cola de [{}], se descarta: {}",
+                    nombreSuscriptor, e.getMessage());
+            return;
+        }
+
+        SuscriptorEsb suscriptor = suscriptores.stream()
+                .filter(s -> s.nombre().equals(nombreSuscriptor))
+                .findFirst()
+                .orElse(null);
+        if (suscriptor == null) {
+            log.error("[ESB-QUEUE] No existe el suscriptor [{}]; mensaje descartado", nombreSuscriptor);
+            return;
+        }
+        if (!suscriptor.escucha(evento.tipo())) {
+            return;
+        }
+
+        if (evento.correlationId() != null) {
+            MDC.put("correlationId", evento.correlationId());
+        }
+        try {
+            log.info("[ESB-QUEUE] Evento {} recibido de RabbitMQ por [{}] (reservaId={})",
+                    evento.tipo(), nombreSuscriptor, evento.reservaId());
+            entregar(suscriptor, evento);
+        } finally {
+            MDC.remove("correlationId");
         }
     }
 
@@ -166,7 +241,10 @@ public class ColaEsb {
         }
     }
 
-    /** Entrega el evento a cada suscriptor interesado, cada uno en su hilo. */
+    /**
+     * Modo memoria: entrega el evento a cada suscriptor interesado, cada uno en su
+     * hilo.
+     */
     private void repartir(EventoReserva evento) {
         // El correlationId vive en el hilo de la petición; aquí se vuelve a poner.
         if (evento.correlationId() != null) {
