@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definiciones_AqpGo"
+                  targetNamespace="http://aqpgo.pe/bpmn">
+
+  <bpmn:collaboration id="Colaboracion_Reserva">
+    <bpmn:participant id="Pool_Orquestador" name="Orquestación (síncrono) - OrquestadorService" processRef="Proceso_ReservarYPagar" />
+    <bpmn:participant id="Pool_Suscriptores" name="Coreografía (asíncrono) - RabbitMQ" processRef="Proceso_Coreografia" />
+    <bpmn:messageFlow id="Msg_Evento" name="Evento de reserva (exchange fanout)" sourceRef="T_Publish" targetRef="Start_Evento" />
+  </bpmn:collaboration>
+
+  <bpmn:process id="Proceso_ReservarYPagar" name="reservarYPagar (v2)" isExecutable="false">
+    <bpmn:startEvent id="Start_Solicitud" name="Solicitud de reserva y pago">
+      <bpmn:outgoing>F1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="T_Validate" name="ESB-VALIDATE&#10;Validar mensaje">
+      <bpmn:incoming>F1</bpmn:incoming>
+      <bpmn:outgoing>F2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="B_Validate" name="Mensaje inválido" attachedToRef="T_Validate">
+      <bpmn:outgoing>F_Rechazo</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="Err_Validate" />
+    </bpmn:boundaryEvent>
+    <bpmn:endEvent id="End_Rechazo" name="Rechazado (dead letter)">
+      <bpmn:incoming>F_Rechazo</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="T_Idempotencia" name="ESB-IDEMPOTENCIA&#10;¿Referencia repetida?">
+      <bpmn:incoming>F2</bpmn:incoming>
+      <bpmn:outgoing>F3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Split" name="ESB-SPLIT&#10;Dividir y crear reserva">
+      <bpmn:incoming>F3</bpmn:incoming>
+      <bpmn:outgoing>F4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Enrich" name="ESB-ENRICH&#10;Añadir reservaId">
+      <bpmn:incoming>F4</bpmn:incoming>
+      <bpmn:outgoing>F5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Operate" name="ESB-OPERATE&#10;Cobrar pago">
+      <bpmn:incoming>F5</bpmn:incoming>
+      <bpmn:outgoing>F6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Route" name="ESB-ROUTE&#10;¿Pago verificado?">
+      <bpmn:incoming>F6</bpmn:incoming>
+      <bpmn:outgoing>F7</bpmn:outgoing>
+      <bpmn:outgoing>F8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="T_Confirmar" name="Confirmar reserva">
+      <bpmn:incoming>F7</bpmn:incoming>
+      <bpmn:outgoing>F9</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Compensar" name="Compensar:&#10;cancelar reserva">
+      <bpmn:incoming>F8</bpmn:incoming>
+      <bpmn:outgoing>F10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Publish" name="ESB-PUBLISH&#10;Publicar evento">
+      <bpmn:incoming>F9</bpmn:incoming>
+      <bpmn:incoming>F10</bpmn:incoming>
+      <bpmn:outgoing>F11</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Orquestacion" name="Respuesta al cliente">
+      <bpmn:incoming>F11</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F1" sourceRef="Start_Solicitud" targetRef="T_Validate" />
+    <bpmn:sequenceFlow id="F2" sourceRef="T_Validate" targetRef="T_Idempotencia" />
+    <bpmn:sequenceFlow id="F_Rechazo" sourceRef="B_Validate" targetRef="End_Rechazo" />
+    <bpmn:sequenceFlow id="F3" sourceRef="T_Idempotencia" targetRef="T_Split" />
+    <bpmn:sequenceFlow id="F4" sourceRef="T_Split" targetRef="T_Enrich" />
+    <bpmn:sequenceFlow id="F5" sourceRef="T_Enrich" targetRef="T_Operate" />
+    <bpmn:sequenceFlow id="F6" sourceRef="T_Operate" targetRef="GW_Route" />
+    <bpmn:sequenceFlow id="F7" name="Sí (VERIFICADO)" sourceRef="GW_Route" targetRef="T_Confirmar" />
+    <bpmn:sequenceFlow id="F8" name="No (rechazado)" sourceRef="GW_Route" targetRef="T_Compensar" />
+    <bpmn:sequenceFlow id="F9" sourceRef="T_Confirmar" targetRef="T_Publish" />
+    <bpmn:sequenceFlow id="F10" sourceRef="T_Compensar" targetRef="T_Publish" />
+    <bpmn:sequenceFlow id="F11" sourceRef="T_Publish" targetRef="End_Orquestacion" />
+  </bpmn:process>
+
+  <bpmn:process id="Proceso_Coreografia" name="Suscriptores del evento (v2)" isExecutable="false">
+    <bpmn:startEvent id="Start_Evento" name="Evento recibido">
+      <bpmn:outgoing>G1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Msg_Def_Evento" />
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="GW_Paralelo" name="Cada suscriptor&#10;en su propio hilo">
+      <bpmn:incoming>G1</bpmn:incoming>
+      <bpmn:outgoing>G2</bpmn:outgoing>
+      <bpmn:outgoing>G3</bpmn:outgoing>
+      <bpmn:outgoing>G6</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="T_Notificaciones" name="Notificaciones&#10;(avisar al cliente)">
+      <bpmn:incoming>G2</bpmn:incoming>
+      <bpmn:outgoing>G4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Auditoria" name="Auditoría&#10;(registrar el evento)">
+      <bpmn:incoming>G3</bpmn:incoming>
+      <bpmn:outgoing>G5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Proveedores" name="Proveedores (B2B)&#10;ORDERS / ORDCHG">
+      <bpmn:documentation>Envía una orden EDI-like (ORDERS) a cada proveedor del paquete; si la reserva se cancela envía ORDCHG. Idempotente por reservaId:proveedorId. Si un proveedor falla: reintentos, dead letter y reproceso; el cliente recibe un aviso transparente.</bpmn:documentation>
+      <bpmn:incoming>G6</bpmn:incoming>
+      <bpmn:outgoing>G7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Notificaciones" name="Notificado">
+      <bpmn:incoming>G4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Auditoria" name="Auditado">
+      <bpmn:incoming>G5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Proveedores" name="Proveedores informados">
+      <bpmn:incoming>G7</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="G1" sourceRef="Start_Evento" targetRef="GW_Paralelo" />
+    <bpmn:sequenceFlow id="G2" sourceRef="GW_Paralelo" targetRef="T_Notificaciones" />
+    <bpmn:sequenceFlow id="G3" sourceRef="GW_Paralelo" targetRef="T_Auditoria" />
+    <bpmn:sequenceFlow id="G4" sourceRef="T_Notificaciones" targetRef="End_Notificaciones" />
+    <bpmn:sequenceFlow id="G5" sourceRef="T_Auditoria" targetRef="End_Auditoria" />
+    <bpmn:sequenceFlow id="G6" sourceRef="GW_Paralelo" targetRef="T_Proveedores" />
+    <bpmn:sequenceFlow id="G7" sourceRef="T_Proveedores" targetRef="End_Proveedores" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagrama_1">
+    <bpmndi:BPMNPlane id="Plano_1" bpmnElement="Colaboracion_Reserva">
+
+      <bpmndi:BPMNShape id="S_Pool1" bpmnElement="Pool_Orquestador" isHorizontal="true">
+        <dc:Bounds x="40" y="40" width="1600" height="340" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Start1" bpmnElement="Start_Solicitud">
+        <dc:Bounds x="100" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Validate" bpmnElement="T_Validate">
+        <dc:Bounds x="180" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_BValidate" bpmnElement="B_Validate">
+        <dc:Bounds x="217" y="222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndRechazo" bpmnElement="End_Rechazo">
+        <dc:Bounds x="217" y="310" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Idemp" bpmnElement="T_Idempotencia">
+        <dc:Bounds x="330" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Split" bpmnElement="T_Split">
+        <dc:Bounds x="480" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Enrich" bpmnElement="T_Enrich">
+        <dc:Bounds x="630" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Operate" bpmnElement="T_Operate">
+        <dc:Bounds x="780" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GWRoute" bpmnElement="GW_Route" isMarkerVisible="true">
+        <dc:Bounds x="930" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Confirmar" bpmnElement="T_Confirmar">
+        <dc:Bounds x="1040" y="70" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Compensar" bpmnElement="T_Compensar">
+        <dc:Bounds x="1040" y="250" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Publish" bpmnElement="T_Publish">
+        <dc:Bounds x="1210" y="160" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndOrq" bpmnElement="End_Orquestacion">
+        <dc:Bounds x="1380" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="E_F1" bpmnElement="F1">
+        <di:waypoint x="136" y="200" /><di:waypoint x="180" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F2" bpmnElement="F2">
+        <di:waypoint x="290" y="200" /><di:waypoint x="330" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_FRechazo" bpmnElement="F_Rechazo">
+        <di:waypoint x="235" y="258" /><di:waypoint x="235" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F3" bpmnElement="F3">
+        <di:waypoint x="440" y="200" /><di:waypoint x="480" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F4" bpmnElement="F4">
+        <di:waypoint x="590" y="200" /><di:waypoint x="630" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F5" bpmnElement="F5">
+        <di:waypoint x="740" y="200" /><di:waypoint x="780" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F6" bpmnElement="F6">
+        <di:waypoint x="890" y="200" /><di:waypoint x="930" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F7" bpmnElement="F7">
+        <di:waypoint x="955" y="175" /><di:waypoint x="955" y="110" /><di:waypoint x="1040" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F8" bpmnElement="F8">
+        <di:waypoint x="955" y="225" /><di:waypoint x="955" y="290" /><di:waypoint x="1040" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F9" bpmnElement="F9">
+        <di:waypoint x="1150" y="110" /><di:waypoint x="1180" y="110" /><di:waypoint x="1180" y="200" /><di:waypoint x="1210" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F10" bpmnElement="F10">
+        <di:waypoint x="1150" y="290" /><di:waypoint x="1180" y="290" /><di:waypoint x="1180" y="200" /><di:waypoint x="1210" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_F11" bpmnElement="F11">
+        <di:waypoint x="1320" y="200" /><di:waypoint x="1380" y="200" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNShape id="S_Pool2" bpmnElement="Pool_Suscriptores" isHorizontal="true">
+        <dc:Bounds x="40" y="420" width="1600" height="350" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Start2" bpmnElement="Start_Evento">
+        <dc:Bounds x="1247" y="567" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GWPar" bpmnElement="GW_Paralelo">
+        <dc:Bounds x="1340" y="560" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Notif" bpmnElement="T_Notificaciones">
+        <dc:Bounds x="1450" y="435" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Audit" bpmnElement="T_Auditoria">
+        <dc:Bounds x="1450" y="545" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Prov" bpmnElement="T_Proveedores">
+        <dc:Bounds x="1450" y="655" width="110" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndNotif" bpmnElement="End_Notificaciones">
+        <dc:Bounds x="1590" y="457" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndProv" bpmnElement="End_Proveedores">
+        <dc:Bounds x="1590" y="677" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndAudit" bpmnElement="End_Auditoria">
+        <dc:Bounds x="1590" y="567" width="36" height="36" />
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="E_G1" bpmnElement="G1">
+        <di:waypoint x="1283" y="585" /><di:waypoint x="1340" y="585" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_G2" bpmnElement="G2">
+        <di:waypoint x="1365" y="560" /><di:waypoint x="1365" y="475" /><di:waypoint x="1450" y="475" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_G3" bpmnElement="G3">
+        <di:waypoint x="1390" y="585" /><di:waypoint x="1450" y="585" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_G4" bpmnElement="G4">
+        <di:waypoint x="1560" y="475" /><di:waypoint x="1590" y="475" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_G5" bpmnElement="G5">
+        <di:waypoint x="1560" y="585" /><di:waypoint x="1590" y="585" />
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="E_G6" bpmnElement="G6">
+        <di:waypoint x="1365" y="610" /><di:waypoint x="1365" y="695" /><di:waypoint x="1450" y="695" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_G7" bpmnElement="G7">
+        <di:waypoint x="1560" y="695" /><di:waypoint x="1590" y="695" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Msg" bpmnElement="Msg_Evento">
+        <di:waypoint x="1265" y="240" /><di:waypoint x="1265" y="567" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,4 +1,4 @@
-//ColaEsb.java
+//Mensajeria\ColaEsb.java
 package com.integrador.Turismo.Mensajeria;
 
 import java.util.List;
@@ -39,6 +39,7 @@ public class ColaEsb {
     private final BlockingQueue<EventoReserva> cola;
     private final List<SuscriptorEsb> suscriptores;
     private final DeadLetterService deadLetterService;
+    private final AvisoProveedores avisoProveedores;
     private final MeterRegistry meterRegistry;
     private final ObjectProvider<RabbitTemplate> rabbitTemplate;
     private final boolean modoBroker;
@@ -51,6 +52,7 @@ public class ColaEsb {
 
     public ColaEsb(List<SuscriptorEsb> suscriptores,
             DeadLetterService deadLetterService,
+            AvisoProveedores avisoProveedores,
             MeterRegistry meterRegistry,
             ObjectProvider<RabbitTemplate> rabbitTemplate,
             @Value("${aqpgo.esb.broker:memoria}") String broker,
@@ -59,6 +61,7 @@ public class ColaEsb {
             @Value("${aqpgo.esb.cola.espera-ms:1000}") long esperaBaseMs) {
         this.suscriptores = suscriptores;
         this.deadLetterService = deadLetterService;
+        this.avisoProveedores = avisoProveedores;
         this.meterRegistry = meterRegistry;
         this.rabbitTemplate = rabbitTemplate;
         this.modoBroker = "rabbit".equalsIgnoreCase(broker);
@@ -212,6 +215,10 @@ public class ColaEsb {
                 s.procesar(evento);
                 contar(evento, actual, "reprocesado");
                 log.info("[ESB-REPROCESS] [{}] procesó el evento correctamente", actual);
+
+                if (SuscriptorProveedores.NOMBRE.equals(actual)) {
+                    avisoProveedores.avisarResuelto(evento);
+                }
             }
             return null;
         } catch (RuntimeException e) {
@@ -294,6 +301,10 @@ public class ColaEsb {
                     } else {
                         contar(evento, suscriptor.nombre(), "rechazado");
                         registrarDeadLetter(suscriptor.nombre(), evento, e.getMessage());
+
+                        if (SuscriptorProveedores.NOMBRE.equals(suscriptor.nombre())) {
+                            avisoProveedores.avisarPendiente(evento);
+                        }
                     }
                 }
             }

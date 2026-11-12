@@ -1,4 +1,4 @@
-//MensajeRechazadoRepository.java
+//Repository\MensajeRechazadoRepository.java
 package com.integrador.Turismo.Repository;
 
 import java.util.Collection;

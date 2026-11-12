@@ -1,4 +1,5 @@
 //Mensajeria\ConsumidoresRabbit.java
+//Mensajeria\ConsumidoresRabbit.java
 package com.integrador.Turismo.Mensajeria;
 
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -26,5 +27,10 @@ public class ConsumidoresRabbit {
     @RabbitListener(queues = RabbitConfig.COLA_AUDITORIA)
     public void auditoria(String cuerpo) {
         cola.recibirDelBroker("Auditoría", cuerpo);
+    }
+
+    @RabbitListener(queues = RabbitConfig.COLA_PROVEEDORES)
+    public void proveedores(String cuerpo) {
+        cola.recibirDelBroker("Proveedores", cuerpo);
     }
 }

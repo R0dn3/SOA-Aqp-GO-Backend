@@ -1,3 +1,5 @@
+//Mensajeria\RabbitConfig.java
+//Mensajeria\RabbitConfig.java
 package com.integrador.Turismo.Mensajeria;
 
 import org.springframework.amqp.core.Binding;
@@ -22,6 +24,7 @@ public class RabbitConfig {
     public static final String EXCHANGE = "aqpgo.reserva.eventos";
     public static final String COLA_NOTIFICACIONES = "aqpgo.reserva.notificaciones";
     public static final String COLA_AUDITORIA = "aqpgo.reserva.auditoria";
+    public static final String COLA_PROVEEDORES = "aqpgo.reserva.proveedores";
 
     @Bean
     FanoutExchange reservaEventos() {
@@ -39,6 +42,11 @@ public class RabbitConfig {
     }
 
     @Bean
+    Queue colaProveedores() {
+        return QueueBuilder.durable(COLA_PROVEEDORES).build();
+    }
+
+    @Bean
     Binding bindingNotificaciones(FanoutExchange reservaEventos,
             @Qualifier("colaNotificaciones") Queue colaNotificaciones) {
         return BindingBuilder.bind(colaNotificaciones).to(reservaEventos);
@@ -48,5 +56,11 @@ public class RabbitConfig {
     Binding bindingAuditoria(FanoutExchange reservaEventos,
             @Qualifier("colaAuditoria") Queue colaAuditoria) {
         return BindingBuilder.bind(colaAuditoria).to(reservaEventos);
+    }
+
+    @Bean
+    Binding bindingProveedores(FanoutExchange reservaEventos,
+            @Qualifier("colaProveedores") Queue colaProveedores) {
+        return BindingBuilder.bind(colaProveedores).to(reservaEventos);
     }
 }

@@ -1,3 +1,4 @@
+//SuscriptorEsb.java
 package com.integrador.Turismo.Mensajeria;
 
 /**

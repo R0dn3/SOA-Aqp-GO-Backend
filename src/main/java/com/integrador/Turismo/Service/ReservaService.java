@@ -1,17 +1,31 @@
 //Service/ReservaService.java
 package com.integrador.Turismo.Service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.integrador.Turismo.DTO.AcompananteDto;
 import com.integrador.Turismo.DTO.ReservaRequest;
 import com.integrador.Turismo.DTO.ReservaResponse;
-import com.integrador.Turismo.Model.*;
-import com.integrador.Turismo.Repository.*;
+import com.integrador.Turismo.Mensajeria.ColaEsb;
+import com.integrador.Turismo.Mensajeria.EventoReserva;
+import com.integrador.Turismo.Model.Acompanante;
+import com.integrador.Turismo.Model.Paquete;
+import com.integrador.Turismo.Model.Reserva;
+import com.integrador.Turismo.Model.Usuario;
+import com.integrador.Turismo.Repository.PaqueteRepository;
+import com.integrador.Turismo.Repository.ReservaRepository;
+import com.integrador.Turismo.Repository.UsuarioRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +34,7 @@ public class ReservaService {
     private final ReservaRepository reservaRepository;
     private final PaqueteRepository paqueteRepository;
     private final UsuarioRepository usuarioRepository;
+    private final ObjectProvider<ColaEsb> colaEsb;
 
     // Cliente — crear reserva
     @Transactional
@@ -106,7 +121,32 @@ public class ReservaService {
         if (reserva.getEstado() == Reserva.Estado.COMPLETADA) {
             throw new IllegalStateException("No se puede cancelar una reserva completada");
         }
+        boolean estabaConfirmada = reserva.getEstado() == Reserva.Estado.CONFIRMADA;
         reserva.setEstado(Reserva.Estado.CANCELADA);
-        return ReservaResponse.from(reservaRepository.save(reserva));
+        ReservaResponse respuesta = ReservaResponse.from(reservaRepository.save(reserva));
+
+        // [ESB] Una reserva confirmada que se cancela avisa a los suscriptores
+        // (Notificaciones, Auditoría y Proveedores, que anula las órdenes B2B).
+        if (estabaConfirmada) {
+            publicarCancelacion(id, usuarioId);
+        }
+        return respuesta;
+    }
+
+    /** Publica el evento DESPUÉS del commit, igual que el orquestador. */
+    private void publicarCancelacion(String reservaId, String usuarioId) {
+        EventoReserva evento = new EventoReserva(EventoReserva.Tipo.RESERVA_CANCELADA, reservaId, usuarioId,
+                "CANCELADA_POR_CLIENTE", MDC.get("correlationId"), LocalDateTime.now());
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    colaEsb.getObject().publicar(evento);
+                }
+            });
+        } else {
+            colaEsb.getObject().publicar(evento);
+        }
     }
 }

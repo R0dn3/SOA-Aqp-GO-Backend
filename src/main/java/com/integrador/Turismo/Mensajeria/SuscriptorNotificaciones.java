@@ -1,3 +1,4 @@
+//Mensajeria\SuscriptorNotificaciones.java
 package com.integrador.Turismo.Mensajeria;
 
 import org.springframework.beans.factory.annotation.Value;

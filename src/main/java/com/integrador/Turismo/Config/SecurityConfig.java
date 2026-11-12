@@ -53,6 +53,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/test").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/esb/**").permitAll()
+                        .requestMatchers("/api/b2b/**").permitAll()
 
                         // ── Públicas ──────────────────────────────────────────
                         .requestMatchers("/api/auth/**").permitAll() // login, register
